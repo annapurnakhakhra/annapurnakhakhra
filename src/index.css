@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-primary: #E65100;
+    --color-primary-hover: #BF360C;
+    --color-secondary: #FFB300;
+    --color-dark: #212121;
+    --color-warm-bg: #FFFDF9;
+    --font-heading: 'Outfit', sans-serif;
+    --font-body: 'Inter', sans-serif;
+  }
+
+  body {
+    background-color: var(--color-warm-bg);
+    color: var(--color-dark);
+    font-family: var(--font-body);
+    overflow-x: clip;
+  }
+}
+
+/* Custom Utilities for Premium Glassmorphism & Animations */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(230, 81, 0, 0.1);
+}
+
+.gradient-hero {
+  background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 50%, #FFCC80 100%);
+}
+
+.gradient-primary {
+  background: linear-gradient(135deg, #E65100 0%, #F57C00 100%);
+}
+
+.badge-pulse {
+  animation: pulse-ring 2s infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(230, 81, 0, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(230, 81, 0, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(230, 81, 0, 0);
+  }
+}
