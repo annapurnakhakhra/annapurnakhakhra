@@ -7,6 +7,7 @@ import { checkoutService } from '../services/checkout';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { RecentlyViewedProducts } from '../components/RecentlyViewedProducts';
+import { FestiveNoticeBanner } from '../components/FestiveNoticeBanner';
 import { hasHtml } from '../utils/text';
 import type { Product } from '../types';
 
@@ -353,6 +354,11 @@ export const ProductDetail: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Static Festive Notice Banner (Diwali Courier Service Announcement) */}
+          <div className="pt-2">
+            <FestiveNoticeBanner className="rounded-xl shadow-xs" />
+          </div>
 
           {/* Actions: Quantity + Add to Cart inline, Buy It Now below (Image 1 layout, Image 2 color) */}
           <div className="space-y-3 pt-1">

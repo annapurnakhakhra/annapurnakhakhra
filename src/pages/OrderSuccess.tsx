@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { CheckCircle2, Package, MapPin, ShoppingBag, ShieldCheck } from 'lucide-react';
 import { orderService } from '../services/orders';
+import { FestiveNoticeBanner } from '../components/FestiveNoticeBanner';
 
 export const OrderSuccess: React.FC = () => {
   const { id: paramId } = useParams<{ id: string }>();
@@ -72,6 +73,9 @@ export const OrderSuccess: React.FC = () => {
             </span>
           </div>
         </div>
+
+        {/* Diwali Dispatch Notice Banner */}
+        <FestiveNoticeBanner className="rounded-3xl shadow-xs" />
 
         {/* Loading placeholder if fetching from server and no state data */}
         {loading && !order && (
