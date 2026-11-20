@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, RefreshCw, ShoppingBag, ArrowLeft, ShieldAle
 import confetti from 'canvas-confetti';
 import { useCart } from '../context/CartContext';
 import { checkoutService } from '../services/checkout';
+import { trackPurchase } from '../services/analytics';
 
 export const CheckoutCallback: React.FC = () => {
   const { provider } = useParams<{ provider: string }>();
@@ -175,11 +176,24 @@ export const CheckoutCallback: React.FC = () => {
           `${pendingCheckout?.customer?.firstName || ''} ${pendingCheckout?.customer?.lastName || ''}`.trim() ||
           'Valued Customer';
 
+        const isPartial = Boolean(pendingCheckout?.is_partial_payment);
+        const grandTotalAmount = Number(pendingCheckout?.total || amount || 0);
+        const advancePaid = isPartial
+          ? Number(pendingCheckout?.advance_amount || pendingCheckout?.total_paid || amount || 0)
+          : Number(grandTotalAmount);
+        const balanceDue = isPartial ? Math.max(0, grandTotalAmount - advancePaid) : 0;
+
         const finalSyncPayload = {
           customerName: fullCustomerName,
           customerPhone: pendingCheckout?.customerPhone || pendingCheckout?.customer?.phone || '',
           customerEmail: pendingCheckout?.customerEmail || pendingCheckout?.customer?.email || '',
+          first_name: pendingCheckout?.customer?.firstName || '',
+          last_name: pendingCheckout?.customer?.lastName || '',
           abandoned_checkout_id: rawOrderId,
+          abandonedCheckoutId: rawOrderId,
+          abandonedSessionId: pendingCheckout?.sessionId || sessionStorage.getItem('checkout_session_id') || null,
+          sessionId: pendingCheckout?.sessionId || sessionStorage.getItem('checkout_session_id') || null,
+          session_id: pendingCheckout?.sessionId || sessionStorage.getItem('checkout_session_id') || null,
           items: pendingCheckout?.items || [],
           shippingAddress: pendingCheckout?.shippingAddress || {},
           subtotal: pendingCheckout?.subtotal || 0,
@@ -187,10 +201,14 @@ export const CheckoutCallback: React.FC = () => {
           discountCode: pendingCheckout?.discountCode || '',
           shippingAmount: pendingCheckout?.shippingAmount || 0,
           shippingMethod: pendingCheckout?.shippingMethod || 'Standard Delivery',
-          total: pendingCheckout?.total || amount || 0,
-          paymentMethod: 'online',
+          total: grandTotalAmount,
+          paymentMethod: isPartial ? 'partial_cod' : 'online',
           paymentProvider: activeProvider,
-          paymentStatus: 'paid',
+          paymentStatus: isPartial ? 'partially_paid' : 'paid',
+          is_partial_payment: isPartial,
+          total_paid: advancePaid,
+          advance_amount: isPartial ? advancePaid : undefined,
+          balance_due: balanceDue,
           transactionReference: transactionRef,
           device_type: typeof window !== 'undefined' && window.innerWidth < 768 ? 'mobile' : 'desktop',
           is_mobile: typeof window !== 'undefined' && window.innerWidth < 768,
@@ -223,12 +241,31 @@ export const CheckoutCallback: React.FC = () => {
 
         const cleanId = String(finalOrderId).replace(/^#/, '');
 
+        const confirmedOrder = {
+          ...(finalOrderRes?.data || {}),
+          id: finalOrderId,
+          order_number: finalOrderRes?.data?.order_number || `#${cleanId}`,
+          total: grandTotalAmount,
+          total_paid: advancePaid,
+          advance_amount: isPartial ? advancePaid : undefined,
+          balance_due: balanceDue,
+          is_partial_payment: isPartial,
+          payment_method: isPartial ? 'partial_cod' : 'online',
+          financial_status: isPartial ? 'partially_paid' : 'paid',
+          items: pendingCheckout?.items,
+          shipping_address: pendingCheckout?.shippingAddress,
+          customer: pendingCheckout?.customer,
+        };
+
+        // Fire purchase tracking
+        trackPurchase(confirmedOrder);
+
         navigate(`/order-success/${cleanId}`, {
           replace: true,
           state: {
             orderId: cleanId,
-            orderNumber: finalOrderRes?.data?.order_number || `#${cleanId}`,
-            orderData: finalOrderRes?.data || null,
+            orderNumber: confirmedOrder.order_number,
+            orderData: confirmedOrder,
           },
         });
       } catch (err: any) {

@@ -1,8 +1,9 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
+import { trackPageView } from './services/analytics';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
@@ -32,6 +33,16 @@ import { ReturnPolicy } from './pages/ReturnPolicy';
 import { ShippingPolicy } from './pages/ShippingPolicy';
 import { TermsAndConditions } from './pages/TermsAndConditions';
 
+const RouteChangeTracker: React.FC = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    trackPageView(window.location.href);
+  }, [location.pathname, location.search]);
+
+  return null;
+};
+
 export const App: React.FC = () => {
   return (
     <AuthProvider>
@@ -39,6 +50,7 @@ export const App: React.FC = () => {
         <CartProvider>
           <Router>
             <ScrollToTop />
+            <RouteChangeTracker />
             <div className="min-h-screen flex flex-col bg-[#fdfbf7]">
               <Header />
               <main className="flex-1 pb-16 md:pb-0">

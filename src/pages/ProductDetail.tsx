@@ -7,8 +7,8 @@ import { checkoutService } from '../services/checkout';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { RecentlyViewedProducts } from '../components/RecentlyViewedProducts';
-import { FestiveNoticeBanner } from '../components/FestiveNoticeBanner';
 import { hasHtml } from '../utils/text';
+import { trackProductView, removeProductSchema } from '../services/analytics';
 import type { Product } from '../types';
 
 export const ProductDetail: React.FC = () => {
@@ -54,6 +54,9 @@ export const ProductDetail: React.FC = () => {
       setLoading(true);
       productService.getProductByHandle(handle).then((data) => {
         setProduct(data);
+        if (data) {
+          trackProductView(data);
+        }
         if (data?.variants?.[0]?.id) {
           setSelectedVariantId(data.variants[0].id);
         }
@@ -73,16 +76,20 @@ export const ProductDetail: React.FC = () => {
             const list = Array.isArray(res)
               ? res
               : Array.isArray((res as any)?.reviews)
-              ? (res as any).reviews
-              : Array.isArray((res as any)?.data?.reviews)
-              ? (res as any).data.reviews
-              : [];
+                ? (res as any).reviews
+                : Array.isArray((res as any)?.data?.reviews)
+                  ? (res as any).data.reviews
+                  : [];
             setReviews(list);
             setReviewsLoading(false);
           });
         }
       });
     }
+
+    return () => {
+      removeProductSchema();
+    };
   }, [handle]);
 
   const handlePincodeCheck = async (e: React.FormEvent) => {
@@ -161,16 +168,16 @@ export const ProductDetail: React.FC = () => {
         setShowReviewModal(false);
         setReviewSuccessMsg('');
       }, 2000);
-      
+
       // Refresh reviews
       reviewsService.getProductReviews(product.id).then((res) => {
         const list = Array.isArray(res)
           ? res
           : Array.isArray((res as any)?.reviews)
-          ? (res as any).reviews
-          : Array.isArray((res as any)?.data?.reviews)
-          ? (res as any).data.reviews
-          : [];
+            ? (res as any).reviews
+            : Array.isArray((res as any)?.data?.reviews)
+              ? (res as any).data.reviews
+              : [];
         setReviews(list);
       });
     } catch (err: any) {
@@ -206,16 +213,16 @@ export const ProductDetail: React.FC = () => {
   const priceNum = selectedVariant?.price
     ? parseFloat(String(selectedVariant.price))
     : typeof product.price === 'number'
-    ? product.price
-    : parseFloat(String(product.price)) || 0;
+      ? product.price
+      : parseFloat(String(product.price)) || 0;
 
   const compareAtNum = selectedVariant?.compareAtPrice
     ? parseFloat(String(selectedVariant.compareAtPrice))
     : product.compareAtPrice
-    ? typeof product.compareAtPrice === 'number'
-      ? product.compareAtPrice
-      : parseFloat(String(product.compareAtPrice))
-    : null;
+      ? typeof product.compareAtPrice === 'number'
+        ? product.compareAtPrice
+        : parseFloat(String(product.compareAtPrice))
+      : null;
 
   const isVariantOutOfStock =
     selectedVariant &&
@@ -233,7 +240,7 @@ export const ProductDetail: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
-      
+
       {/* Back Link */}
       <Link to="/shop" className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-orange-600 transition-colors">
         <ArrowLeft className="w-4 h-4" />
@@ -241,7 +248,7 @@ export const ProductDetail: React.FC = () => {
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-        
+
         {/* Gallery & Wishlist */}
         <div className="space-y-4 relative">
           <button
@@ -329,11 +336,10 @@ export const ProductDetail: React.FC = () => {
                       key={v.id}
                       type="button"
                       onClick={() => setSelectedVariantId(v.id)}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                        isSelected
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${isSelected
                           ? 'bg-[#7d4b0e] text-white shadow-sm ring-2 ring-[#7d4b0e]/30'
                           : 'bg-white text-slate-700 border border-slate-200 hover:border-amber-400'
-                      } ${isVOutOfStock ? 'opacity-65' : ''}`}
+                        } ${isVOutOfStock ? 'opacity-65' : ''}`}
                     >
                       {v.title || '100gm'}
                       {isVOutOfStock && <span className="ml-1 text-[10px] text-rose-500 font-normal">(Sold Out)</span>}
@@ -354,11 +360,6 @@ export const ProductDetail: React.FC = () => {
               </div>
             </div>
           )}
-
-          {/* Static Festive Notice Banner (Diwali Courier Service Announcement) */}
-          <div className="pt-2">
-            <FestiveNoticeBanner className="rounded-xl shadow-xs" />
-          </div>
 
           {/* Actions: Quantity + Add to Cart inline, Buy It Now below (Image 1 layout, Image 2 color) */}
           <div className="space-y-3 pt-1">
@@ -434,9 +435,8 @@ export const ProductDetail: React.FC = () => {
 
             <div className="relative">
               <div
-                className={`transition-all duration-300 overflow-hidden ${
-                  isDescExpanded ? 'max-h-none' : 'max-h-36'
-                }`}
+                className={`transition-all duration-300 overflow-hidden ${isDescExpanded ? 'max-h-none' : 'max-h-36'
+                  }`}
               >
                 {hasHtml(product.description) ? (
                   <div
@@ -471,7 +471,7 @@ export const ProductDetail: React.FC = () => {
               <MapPin className="w-4 h-4 text-orange-600" />
               <span>Check Delivery Pincode</span>
             </div>
-            
+
             <form onSubmit={handlePincodeCheck} className="flex gap-2">
               <input
                 type="text"
@@ -571,9 +571,8 @@ export const ProductDetail: React.FC = () => {
                     {[...Array(5)].map((_, i) => (
                       <Star
                         key={i}
-                        className={`w-3.5 h-3.5 ${
-                          i < (Number(rev.rating) || 5) ? 'fill-amber-400 text-amber-400' : 'text-slate-200'
-                        }`}
+                        className={`w-3.5 h-3.5 ${i < (Number(rev.rating) || 5) ? 'fill-amber-400 text-amber-400' : 'text-slate-200'
+                          }`}
                       />
                     ))}
                   </div>

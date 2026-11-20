@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { HeroSection } from "../components/Herosection";
-import { FestiveNoticeBanner } from "../components/FestiveNoticeBanner";
 import { CategoriesSlider } from "../components/CategoriesSlider";
 import { OurPromiseSection } from "../components/OurPromiseSection";
 import { ProductCard } from "../components/ProductCard";
@@ -31,11 +30,6 @@ export const Home: React.FC = () => {
 
       {/* 1. Hero Banner Slider Section */}
       <HeroSection />
-
-      {/* 2. Static Festive & Courier Notice Banner (Placed after banner slider, above Our Collection) */}
-      <div className="max-w-7xl mx-auto px-4 pt-4 pb-2">
-        <FestiveNoticeBanner className="rounded-2xl md:rounded-3xl shadow-sm" />
-      </div>
 
       {/* 3. Category Grid / Our Collection */}
       <CategoriesSlider />

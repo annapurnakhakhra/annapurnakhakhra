@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, Trash2, Plus, Minus, ShoppingBag, ShieldCheck, ArrowRight, Truck } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { trackInitiateCheckout } from '../services/analytics';
 import { MegaEcomOtpModal } from './MegaEcomOtpModal';
 
 export const CartDrawer: React.FC = () => {
@@ -210,6 +211,7 @@ export const CartDrawer: React.FC = () => {
 
               <button
                 onClick={() => {
+                  trackInitiateCheckout(cart, subtotal);
                   setIsCartOpen(false);
                   navigate('/checkout');
                 }}

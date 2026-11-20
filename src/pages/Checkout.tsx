@@ -22,6 +22,7 @@ import { useAuth } from '../context/AuthContext';
 import { checkoutService, type ShippingRatesPayload } from '../services/checkout';
 import { customerService, type CustomerAddress } from '../services/customer';
 import { loadRazorpayScript, loadEasebuzzScript, submitIciciForm } from '../utils/paymentSdk';
+import { trackInitiateCheckout, trackPurchase } from '../services/analytics';
 
 export const Checkout: React.FC = () => {
   const navigate = useNavigate();
@@ -33,6 +34,13 @@ export const Checkout: React.FC = () => {
   useEffect(() => {
     setIsCartOpen(false);
   }, [setIsCartOpen]);
+
+  // Track checkout initiation once on mount
+  useEffect(() => {
+    if (cart.length > 0) {
+      trackInitiateCheckout(cart, subtotal);
+    }
+  }, []);
 
   // Unique session ID for abandoned checkout sync
   const [checkoutSessionId] = useState(() => {
@@ -231,13 +239,16 @@ export const Checkout: React.FC = () => {
       const res = await checkoutService.getShippingRates(payload);
       const ratesList = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
       if (ratesList.length > 0) {
-        setShippingRates(ratesList);
-        setSelectedShippingRate((prev: any) => {
-          if (prev && ratesList.some((r: any) => (r.method_id || r.name) === (prev.method_id || prev.name))) {
-            return prev;
-          }
-          return ratesList[0];
-        });
+        // Find the shipping rate with minimum cost
+        const minRate = ratesList.reduce((min: any, cur: any) => {
+          const minCost = Number(min.cost ?? 0);
+          const curCost = Number(cur.cost ?? 0);
+          return curCost < minCost ? cur : min;
+        }, ratesList[0]);
+
+        // When multiple shipping rates are returned, display and apply the minimum amount rate
+        setShippingRates([minRate]);
+        setSelectedShippingRate(minRate);
       } else {
         setShippingRates([]);
         setSelectedShippingRate(null);
@@ -300,6 +311,23 @@ export const Checkout: React.FC = () => {
   const taxableAmount = Math.max(subtotal - discountAmount, 0);
   const gstAmount = Number((taxableAmount * 0.05).toFixed(2));
   const grandTotal = Math.max(taxableAmount + shippingCost, 0);
+
+  // Payment Plan: "full" (100% Prepaid Online or Full COD) or "partial" (Advance Token + COD)
+  // Default to Full Payment as requested
+  const [paymentPlan, setPaymentPlan] = useState<'full' | 'partial'>('full');
+
+  // Tiered Partial Payment Calculation:
+  // Above 399 -> Flat ₹100 Advance
+  // 399 or below (<= 399) -> Flat ₹50 Advance
+  const advanceAmount = grandTotal > 399 ? 100 : Math.min(grandTotal, 50);
+  const balanceDue = Math.max(0, grandTotal - advanceAmount);
+  const isPartialPayment = paymentPlan === 'partial';
+  const amountToPayNow = isPartialPayment ? advanceAmount : grandTotal;
+
+  // Filter Gateways: when partial payment is selected, only online gateways can collect the advance token
+  const availableGateways = isPartialPayment
+    ? gateways.filter((gw) => !String(gw.provider || gw.name || gw.id).toLowerCase().includes('cod'))
+    : gateways;
 
   // Debounced auto-sync to abandoned checkout (1.5s debounce as required)
   useEffect(() => {
@@ -504,21 +532,42 @@ export const Checkout: React.FC = () => {
     abandonedOrderId: string | number,
     fullCustomerName: string,
     formattedPhone: string,
-    paymentMethod: 'online' | 'cod',
+    paymentMethod: 'online' | 'cod' | 'partial_cod',
     paymentProvider: string,
-    paymentStatus: 'paid' | 'pending',
-    transactionReference: string
+    paymentStatus: 'paid' | 'pending' | 'partially_paid',
+    transactionReference: string,
+    extraPartialData?: {
+      is_partial_payment?: boolean;
+      total_paid?: number;
+      advance_amount?: number;
+      balance_due?: number;
+    }
   ) => {
     const fullStreet = [shippingAddress.address1, shippingAddress.address2].filter(Boolean).join(', ');
 
+    const isPartial = Boolean(extraPartialData?.is_partial_payment ?? isPartialPayment);
+    const finalTotalPaid = extraPartialData?.total_paid !== undefined
+      ? extraPartialData.total_paid
+      : (isPartial ? advanceAmount : (paymentStatus === 'paid' ? grandTotal : 0));
+    const finalAdvanceAmount = extraPartialData?.advance_amount !== undefined
+      ? extraPartialData.advance_amount
+      : (isPartial ? advanceAmount : undefined);
+    const finalBalanceDue = extraPartialData?.balance_due !== undefined
+      ? extraPartialData.balance_due
+      : (isPartial ? balanceDue : 0);
+
     // 1. Phase 3: POST /checkout/sync
-    const syncFinalPayload = {
+    const syncFinalPayload: any = {
       customerName: fullCustomerName,
       customerPhone: formattedPhone,
       customerEmail: customer.email.trim(),
       first_name: customer.firstName.trim(),
       last_name: customer.lastName.trim(),
       abandoned_checkout_id: abandonedOrderId,
+      abandonedCheckoutId: abandonedOrderId,
+      abandonedSessionId: checkoutSessionId,
+      sessionId: checkoutSessionId,
+      session_id: checkoutSessionId,
       items: cart.map((it) => {
         const rawProductId = it.productId || it.product_id || (it.id ? String(it.id).split('_')[0] : '') || it.variantId;
         const numericProductId = Number(rawProductId) || rawProductId;
@@ -554,6 +603,10 @@ export const Checkout: React.FC = () => {
       paymentMethod,
       paymentProvider,
       paymentStatus,
+      is_partial_payment: isPartial,
+      total_paid: finalTotalPaid,
+      advance_amount: finalAdvanceAmount,
+      balance_due: finalBalanceDue,
       transactionReference,
       device_type: typeof window !== 'undefined' && window.innerWidth < 768 ? 'mobile' : 'desktop',
       is_mobile: typeof window !== 'undefined' && window.innerWidth < 768,
@@ -598,11 +651,30 @@ export const Checkout: React.FC = () => {
       abandonedOrderId;
     const cleanId = String(finalOrderResult?.data?.id || rawOrderNumber).replace(/^#/, '');
 
+    const confirmedOrderData = {
+      ...(finalOrderResult?.data || {}),
+      id: finalOrderResult?.data?.id || cleanId,
+      order_number: finalOrderResult?.data?.order_number || `#${cleanId}`,
+      total: grandTotal,
+      total_paid: finalTotalPaid,
+      advance_amount: finalAdvanceAmount,
+      balance_due: finalBalanceDue,
+      is_partial_payment: isPartial,
+      payment_method: paymentMethod,
+      financial_status: paymentStatus,
+      items: cart,
+      shipping_address: shippingAddress,
+      customer,
+    };
+
+    // Fire purchase tracking
+    trackPurchase(confirmedOrderData);
+
     navigate(`/order-success/${cleanId}`, {
       state: {
         orderId: cleanId,
-        orderNumber: finalOrderResult?.data?.order_number || `#${cleanId}`,
-        orderData: finalOrderResult?.data || null,
+        orderNumber: confirmedOrderData.order_number,
+        orderData: confirmedOrderData,
       },
     });
   };
@@ -762,6 +834,11 @@ export const Checkout: React.FC = () => {
         shippingAmount: shippingCost,
         shippingMethod: selectedShippingRate?.name || 'Standard Delivery',
         total: grandTotal,
+        is_partial_payment: isPartialPayment,
+        advance_amount: isPartialPayment ? advanceAmount : undefined,
+        balance_due: isPartialPayment ? balanceDue : 0,
+        total_paid: isPartialPayment ? advanceAmount : grandTotal,
+        sessionId: checkoutSessionId,
       };
       sessionStorage.setItem('pending_checkout', JSON.stringify(pendingSnapshot));
 
@@ -784,7 +861,10 @@ export const Checkout: React.FC = () => {
       const initPayload = {
         order_id: activeOrderId,
         provider: normProvider,
-        amount: grandTotal,
+        amount: amountToPayNow,
+        is_partial_payment: isPartialPayment,
+        advance_amount: isPartialPayment ? advanceAmount : undefined,
+        balance_due: isPartialPayment ? balanceDue : 0,
         productinfo: `Order CHK-${activeOrderId}`,
         return_url: returnUrl,
         customer: {
@@ -827,7 +907,7 @@ export const Checkout: React.FC = () => {
                     payment_id: initData.payment_id,
                     status: 'success',
                     txnid: response.txnid || initData.txnid,
-                    amount: String(grandTotal),
+                    amount: String(amountToPayNow),
                     firstname: customer.firstName.trim(),
                     email: customer.email.trim(),
                     phone: formattedPhone,
@@ -842,10 +922,16 @@ export const Checkout: React.FC = () => {
                       activeOrderId,
                       fullCustomerName,
                       formattedPhone,
-                      'online',
+                      isPartialPayment ? 'partial_cod' : 'online',
                       'easebuzz',
-                      'paid',
-                      response.easepayid || response.txnid
+                      isPartialPayment ? 'partially_paid' : 'paid',
+                      response.easepayid || response.txnid,
+                      {
+                        is_partial_payment: isPartialPayment,
+                        advance_amount: advanceAmount,
+                        total_paid: advanceAmount,
+                        balance_due: balanceDue,
+                      }
                     );
                   } else {
                     setErrorMessage(verifyRes?.message || 'Payment verification failed. Cart preserved.');
@@ -886,7 +972,7 @@ export const Checkout: React.FC = () => {
           throw new Error('Failed to load Razorpay payment SDK. Please check your internet connection.');
         }
 
-        const expectedPaise = Math.round(grandTotal * 100);
+        const expectedPaise = Math.round(amountToPayNow * 100);
         const rzpOptions = {
           key: initData.key_id,
           amount: initData.amount || expectedPaise,
@@ -920,10 +1006,16 @@ export const Checkout: React.FC = () => {
                   activeOrderId,
                   fullCustomerName,
                   formattedPhone,
-                  'online',
+                  isPartialPayment ? 'partial_cod' : 'online',
                   'razorpay',
-                  'paid',
-                  response.razorpay_payment_id
+                  isPartialPayment ? 'partially_paid' : 'paid',
+                  response.razorpay_payment_id,
+                  {
+                    is_partial_payment: isPartialPayment,
+                    advance_amount: advanceAmount,
+                    total_paid: advanceAmount,
+                    balance_due: balanceDue,
+                  }
                 );
               } else {
                 setErrorMessage(verifyRes?.message || 'Payment verification failed. Your cart is preserved.');
@@ -958,10 +1050,16 @@ export const Checkout: React.FC = () => {
             activeOrderId,
             fullCustomerName,
             formattedPhone,
-            'online',
+            isPartialPayment ? 'partial_cod' : 'online',
             normProvider,
-            'paid',
-            `TXN_${activeOrderId}`
+            isPartialPayment ? 'partially_paid' : 'paid',
+            initData.transaction_id || `TXN_${activeOrderId}`,
+            {
+              is_partial_payment: isPartialPayment,
+              advance_amount: advanceAmount,
+              total_paid: isPartialPayment ? advanceAmount : grandTotal,
+              balance_due: isPartialPayment ? balanceDue : 0,
+            }
           );
           setIsPlacingOrder(false);
         }
@@ -1007,10 +1105,6 @@ export const Checkout: React.FC = () => {
             <ArrowLeft className="w-4 h-4" />
             <span>Return to Shopping</span>
           </button>
-          <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>256-Bit SSL Encrypted Checkout</span>
-          </div>
         </div>
 
         {/* Global Error Alert */}
@@ -1332,7 +1426,7 @@ export const Checkout: React.FC = () => {
                   <div className="space-y-2">
                     {shippingRates.map((method, idx) => {
                       const isSelected = selectedShippingRate
-                        ? (selectedShippingRate.method_id === method.method_id || selectedShippingRate.name === method.name)
+                        ? (selectedShippingRate.method_id === method.method_id && Number(selectedShippingRate.cost) === Number(method.cost))
                         : idx === 0;
                       const costNum = Number(method.cost ?? 0);
                       return (
@@ -1388,6 +1482,105 @@ export const Checkout: React.FC = () => {
                 </div>
               </div>
 
+              {/* 🔹 SELECT PAYMENT OPTION (Full Payment First & Default) */}
+              <div className="mb-6 space-y-3">
+                <div className="text-xs font-bold uppercase tracking-wider text-stone-500">
+                  SELECT PAYMENT OPTION
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {/* Card 1: Full Payment (FIRST OPTION & DEFAULT) */}
+                  <div
+                    onClick={() => setPaymentPlan('full')}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all relative ${!isPartialPayment
+                        ? 'border-[#7d4b0e] bg-white ring-1 ring-[#7d4b0e]'
+                        : 'border-stone-200 hover:border-stone-300 bg-white'
+                      }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider bg-stone-100 text-stone-700 px-2.5 py-0.5 rounded-full">
+                        100% PREPAID
+                      </span>
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!isPartialPayment ? 'border-[#7d4b0e]' : 'border-stone-300'
+                          }`}
+                      >
+                        {!isPartialPayment && <div className="w-2.5 h-2.5 rounded-full bg-[#7d4b0e]" />}
+                      </div>
+                    </div>
+
+                    <h3 className="font-bold text-stone-900 text-xs sm:text-sm">
+                      Full Payment (100% Prepaid)
+                    </h3>
+                    <p className="text-[11px] text-stone-600 mt-1 leading-snug">
+                      Pay the complete order value of <strong className="text-stone-900">₹{grandTotal.toFixed(2)}</strong> now. Fastest priority dispatch &amp; contact-free delivery.
+                    </p>
+
+                    <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between text-[11px]">
+                      <span className="text-stone-500">Total to Pay Now:</span>
+                      <span className="font-extrabold text-stone-900">₹{grandTotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-teal-700 font-semibold mt-0.5">
+                      <span>Balance at Delivery:</span>
+                      <span>₹0.00 (PAID)</span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Partial Payment (SECOND OPTION) */}
+                  <div
+                    onClick={() => {
+                      setPaymentPlan('partial');
+                      // If current selected provider was COD, auto switch to first available online gateway
+                      if (String(selectedProvider).toLowerCase().includes('cod')) {
+                        const firstOnline = gateways.find((g) => !String(g.provider || g.name || g.id).toLowerCase().includes('cod'));
+                        if (firstOnline) {
+                          setSelectedProvider(firstOnline.provider || firstOnline.name || firstOnline.id);
+                        }
+                      }
+                    }}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all relative ${isPartialPayment
+                        ? 'border-[#7d4b0e] bg-white ring-1 ring-[#7d4b0e]'
+                        : 'border-stone-200 hover:border-stone-300 bg-white'
+                      }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider bg-[#7d4b0e] text-white px-2.5 py-0.5 rounded-full">
+                        <Zap className="w-3 h-3 text-amber-300 fill-amber-300" /> MOST POPULAR
+                      </span>
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isPartialPayment ? 'border-[#7d4b0e]' : 'border-stone-300'
+                          }`}
+                      >
+                        {isPartialPayment && <div className="w-2.5 h-2.5 rounded-full bg-[#7d4b0e]" />}
+                      </div>
+                    </div>
+
+                    <h3 className="font-bold text-stone-900 text-xs sm:text-sm">
+                      Partial Payment (Advance + COD)
+                    </h3>
+                    <p className="text-[11px] text-stone-600 mt-1 leading-snug">
+                      Pay <strong className="text-[#7d4b0e]">₹{advanceAmount.toFixed(2)}</strong> online now to confirm order. Pay remaining <strong className="text-stone-900">₹{balanceDue.toFixed(2)}</strong> at delivery.
+                    </p>
+
+                    <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between text-[11px]">
+                      <span className="text-stone-500">Advance Online:</span>
+                      <span className="font-extrabold text-stone-900">₹{advanceAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-stone-700 font-medium mt-0.5">
+                      <span className="text-stone-500">Balance on COD:</span>
+                      <span className="font-bold text-stone-900">₹{balanceDue.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Gateway Options Title */}
+              <div className="mb-2 text-xs font-bold uppercase tracking-wider text-stone-500">
+                {isPartialPayment
+                  ? `Choose Online Gateway to Pay ₹${advanceAmount.toFixed(2)} Advance`
+                  : 'Choose Payment Method'}
+              </div>
+
               {/* Gateway Options */}
               <div className="space-y-3 mb-6">
                 {gatewaysLoading ? (
@@ -1395,12 +1588,12 @@ export const Checkout: React.FC = () => {
                     <RefreshCw className="w-4 h-4 animate-spin text-stone-400" />
                     <span>Loading available payment methods from store...</span>
                   </div>
-                ) : gateways.length === 0 ? (
+                ) : availableGateways.length === 0 ? (
                   <div className="p-4 rounded-xl border border-dashed border-stone-200 bg-stone-50/70 text-center text-xs text-stone-500">
                     <p>No payment methods available from API.</p>
                   </div>
                 ) : (
-                  gateways.map((gw, idx) => {
+                  availableGateways.map((gw, idx) => {
                     const providerKey = gw.provider || gw.name || gw.id || `gw-${idx}`;
                     const isSelected = selectedProvider === providerKey;
                     const title = gw.display_title || gw.title || gw.name || gw.provider || 'Payment Method';
@@ -1472,6 +1665,16 @@ export const Checkout: React.FC = () => {
                   <>
                     <RefreshCw className="w-5 h-5 animate-spin" />
                     <span>Processing Order...</span>
+                  </>
+                ) : isPartialPayment ? (
+                  <>
+                    <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                    <span>PAY ADVANCE ₹{advanceAmount.toFixed(2)} &amp; PLACE ORDER</span>
+                  </>
+                ) : String(selectedProvider).toLowerCase().includes('cod') ? (
+                  <>
+                    <Banknote className="w-4 h-4 text-emerald-300" />
+                    <span>PLACE COD ORDER (₹{grandTotal.toFixed(2)})</span>
                   </>
                 ) : (
                   <>
@@ -1637,6 +1840,20 @@ export const Checkout: React.FC = () => {
                     Rs.{grandTotal.toFixed(2)}
                   </span>
                 </div>
+
+                {/* Partial Payment Summary Breakdown */}
+                {isPartialPayment && (
+                  <div className="mt-3 p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-xs space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-stone-600 font-medium">Advance Online (Now):</span>
+                      <span className="font-extrabold text-[#7d4b0e]">Rs.{advanceAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-stone-600 font-medium">Balance at Delivery (COD):</span>
+                      <span className="font-bold text-stone-900">Rs.{balanceDue.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Authentic Guarantee Card */}

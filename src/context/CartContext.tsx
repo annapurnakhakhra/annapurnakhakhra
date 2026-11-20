@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { CartItem, Product } from '../types';
+import { trackAddToCart } from '../services/analytics';
 
 interface CartContextType {
   cart: CartItem[];
@@ -95,6 +96,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (openDrawer) {
       setIsCartOpen(true);
     }
+
+    // Fire GA4 & Meta Pixel add_to_cart tracking
+    trackAddToCart(product, matchedVariant, validQty);
   };
 
   const removeFromCart = (itemId: string) => {

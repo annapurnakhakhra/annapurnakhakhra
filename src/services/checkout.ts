@@ -19,6 +19,44 @@ export interface ValidateCouponPayload {
   order_amount: number;
 }
 
+export interface SyncFinalOrderPayload {
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  first_name?: string;
+  last_name?: string;
+  abandoned_checkout_id?: string | number | null;
+  abandonedCheckoutId?: string | number | null;
+  abandonedSessionId?: string | null;
+  sessionId?: string | null;
+  session_id?: string | null;
+  items: Array<{
+    productId: number | string;
+    variantId: number | string | null;
+    title: string;
+    sku?: string;
+    price: number;
+    quantity: number;
+  }>;
+  shippingAddress: any;
+  subtotal: number;
+  discountAmount: number;
+  discountCode?: string;
+  shippingAmount: number;
+  shippingMethod?: string;
+  total: number;
+  paymentMethod: string;
+  paymentProvider: string;
+  paymentStatus: string;
+  is_partial_payment?: boolean;
+  total_paid?: number;
+  advance_amount?: number;
+  balance_due?: number;
+  transactionReference?: string;
+  device_type?: string;
+  is_mobile?: boolean;
+}
+
 export const checkoutService = {
   /**
    * Store Info: GET /api/shop/info

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { CheckCircle2, Package, MapPin, ShoppingBag, ShieldCheck } from 'lucide-react';
 import { orderService } from '../services/orders';
-import { FestiveNoticeBanner } from '../components/FestiveNoticeBanner';
+import { trackPurchase } from '../services/analytics';
 
 export const OrderSuccess: React.FC = () => {
   const { id: paramId } = useParams<{ id: string }>();
@@ -38,6 +38,15 @@ export const OrderSuccess: React.FC = () => {
     }
   }, [cleanId]);
 
+  // Fire purchase tracking (deduplicated internally)
+  useEffect(() => {
+    if (order) {
+      trackPurchase(order);
+    } else if (stateData) {
+      trackPurchase(stateData);
+    }
+  }, [order, stateData]);
+
   const displayOrderNumber =
     order?.order_number ||
     stateOrderNumber ||
@@ -52,21 +61,58 @@ export const OrderSuccess: React.FC = () => {
   const shippingVal = amounts?.shipping_amount || order?.shipping_price || '0';
   const totalVal = amounts?.total_amount || paymentDetails?.amount || order?.total_price || order?.total || '0';
 
+  const isPartial = Boolean(
+    order?.is_partial_payment ||
+    order?.financial_status === 'partially_paid' ||
+    order?.payment_method === 'partial_cod' ||
+    (Number(order?.total_paid) > 0 && Number(order?.total_paid) < Number(totalVal)) ||
+    (order?.note && String(order.note).includes('partial_payment'))
+  );
+
+  const advancePaid = Number(
+    order?.advance_amount ||
+    order?.total_paid ||
+    (isPartial ? (Number(totalVal) > 399 ? 100 : 50) : totalVal)
+  );
+  const balanceDue = Number(
+    order?.balance_due !== undefined
+      ? order.balance_due
+      : Math.max(0, Number(totalVal) - advancePaid)
+  );
+
   return (
     <div className="bg-[#fcfaf7] min-h-screen py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto space-y-8">
-        
+
         {/* Header Badge */}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-6 sm:p-8 text-center space-y-3 shadow-xs">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
+        <div className={`border rounded-3xl p-6 sm:p-8 text-center space-y-3 shadow-xs ${isPartial ? 'bg-amber-50/70 border-amber-200' : 'bg-emerald-50 border-emerald-200'
+          }`}>
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto shadow-xs ${isPartial ? 'bg-amber-100 text-[#7d4b0e]' : 'bg-emerald-100 text-emerald-600'
+            }`}>
             <CheckCircle2 className="w-10 h-10" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-serif">
-            Order Confirmed!
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto">
-            Thank you for your purchase! Your delicious handcrafted Annapurna Khakhra order has been confirmed.
-          </p>
+          {isPartial ? (
+            <div className="space-y-1.5">
+              <span className="inline-block text-[11px] uppercase tracking-wider font-extrabold bg-[#7d4b0e] text-white px-3 py-1 rounded-full shadow-xs">
+                ⚡ Partial Advance Received • COD Order Confirmed
+              </span>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-serif pt-1">
+                Order Confirmed!
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-700 max-w-md mx-auto">
+                We have received your advance payment of <strong className="text-[#7d4b0e]">₹{advancePaid.toFixed(2)}</strong>. Your handcrafted Annapurna Khakhra order is confirmed. Please keep the remaining <strong className="text-stone-900">₹{balanceDue.toFixed(2)}</strong> ready at delivery.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-serif">
+                Order Confirmed!
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto">
+                Thank you for your purchase! Your delicious handcrafted Annapurna Khakhra order has been confirmed.
+              </p>
+            </div>
+          )}
           <div className="pt-1">
             <span className="text-xs sm:text-sm font-bold text-[#7d4b0e] bg-amber-100/80 px-4 py-1.5 rounded-full border border-amber-200/80 inline-block">
               Order Number: {displayOrderNumber}
@@ -75,7 +121,6 @@ export const OrderSuccess: React.FC = () => {
         </div>
 
         {/* Diwali Dispatch Notice Banner */}
-        <FestiveNoticeBanner className="rounded-3xl shadow-xs" />
 
         {/* Loading placeholder if fetching from server and no state data */}
         {loading && !order && (
@@ -89,7 +134,7 @@ export const OrderSuccess: React.FC = () => {
         {/* Order Details Card */}
         {order && (
           <div className="bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
-            
+
             <div className="flex items-center justify-between border-b border-stone-100 pb-4">
               <h2 className="text-sm sm:text-base font-bold text-[#7d4b0e] flex items-center gap-2">
                 <Package className="w-5 h-5 text-amber-700" />
@@ -159,9 +204,22 @@ export const OrderSuccess: React.FC = () => {
                 </span>
               </div>
               <div className="flex justify-between font-extrabold text-stone-900 text-sm pt-2 border-t border-stone-100">
-                <span>Total Amount Paid</span>
+                <span>Grand Total Amount</span>
                 <span className="text-[#7d4b0e] text-base">₹{Number(totalVal).toFixed(2)}</span>
               </div>
+
+              {isPartial && (
+                <div className="mt-3 p-3.5 bg-amber-50/90 border border-amber-200 rounded-2xl space-y-2 text-xs">
+                  <div className="flex justify-between items-center text-emerald-700 font-bold">
+                    <span>Advance Payment (Paid Online):</span>
+                    <span>-₹{advancePaid.toFixed(2)} (PAID)</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[#7d4b0e] font-extrabold text-sm pt-2 border-t border-amber-200/70">
+                    <span>Pending Balance at Delivery:</span>
+                    <span>₹{balanceDue.toFixed(2)} (CASH ON DELIVERY)</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Trust Assurance Card */}
