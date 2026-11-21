@@ -5,10 +5,10 @@ export const TopOfferBar: React.FC = () => {
     <>
       Free Shipping on Orders Above{" "}
       <span className="highlight">₹599</span>
+    </>,
+    <>
+      Get <span className="highlight">10% Discount</span> on Prepaid Orders
     </>
-    // <>
-    //   Get <span className="highlight">10% Discount</span> on Prepaid Orders
-    // </>
   ];
 
   const [currentOffer, setCurrentOffer] = useState(0);
