@@ -68,78 +68,96 @@ export function mapProductToUI(backendProduct: any): Product {
 
   const normalizedUrl = normalizeImageUrl(urlStr) || 'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=800&q=80';
 
+  // Map all product images if available
+  let allImages: { url: string; altText?: string }[] = [];
+  if (Array.isArray(backendProduct.images) && backendProduct.images.length > 0) {
+    allImages = backendProduct.images
+      .map((img: any) => {
+        const rawUrl = typeof img === 'string' ? img : img?.url || img?.src || img?.image_url || img?.originalSrc || '';
+        const norm = normalizeImageUrl(rawUrl);
+        return norm ? { url: norm, altText: img?.alt_text || img?.altText || title } : null;
+      })
+      .filter(Boolean) as { url: string; altText?: string }[];
+  }
+
+  if (allImages.length === 0 && normalizedUrl) {
+    allImages = [{ url: normalizedUrl, altText: title }];
+  } else if (normalizedUrl && !allImages.some((img) => img.url === normalizedUrl)) {
+    allImages.unshift({ url: normalizedUrl, altText: title });
+  }
+
   const totalInventory =
     backendProduct.total_inventory !== undefined && backendProduct.total_inventory !== null
       ? Number(backendProduct.total_inventory)
       : backendProduct.inventory_quantity !== undefined && backendProduct.inventory_quantity !== null
-      ? Number(backendProduct.inventory_quantity)
-      : backendProduct.variants?.[0]?.inventoryQuantity !== undefined && backendProduct.variants[0].inventoryQuantity !== null
-      ? Number(backendProduct.variants[0].inventoryQuantity)
-      : undefined;
+        ? Number(backendProduct.inventory_quantity)
+        : backendProduct.variants?.[0]?.inventoryQuantity !== undefined && backendProduct.variants[0].inventoryQuantity !== null
+          ? Number(backendProduct.variants[0].inventoryQuantity)
+          : undefined;
 
   const isAvailable =
     totalInventory !== undefined
       ? totalInventory > 0
       : backendProduct.availableForSale !== undefined
-      ? Boolean(backendProduct.availableForSale)
-      : backendProduct.is_available !== undefined
-      ? Boolean(backendProduct.is_available)
-      : backendProduct.variants?.[0]?.availableForSale !== undefined
-      ? Boolean(backendProduct.variants[0].availableForSale)
-      : true;
+        ? Boolean(backendProduct.availableForSale)
+        : backendProduct.is_available !== undefined
+          ? Boolean(backendProduct.is_available)
+          : backendProduct.variants?.[0]?.availableForSale !== undefined
+            ? Boolean(backendProduct.variants[0].availableForSale)
+            : true;
 
   const mappedVariants = Array.isArray(backendProduct.variants) && backendProduct.variants.length > 0
     ? backendProduct.variants.map((v: any) => {
-        const rawVPrice = v.price?.amount !== undefined ? v.price.amount : v.price !== undefined ? v.price : basePrice;
-        const vPrice = Number(rawVPrice) || basePrice;
+      const rawVPrice = v.price?.amount !== undefined ? v.price.amount : v.price !== undefined ? v.price : basePrice;
+      const vPrice = Number(rawVPrice) || basePrice;
 
-        const rawVCompare =
-          v.compare_at_price?.amount !== undefined
-            ? v.compare_at_price.amount
-            : v.compare_at_price !== undefined
+      const rawVCompare =
+        v.compare_at_price?.amount !== undefined
+          ? v.compare_at_price.amount
+          : v.compare_at_price !== undefined
             ? v.compare_at_price
             : v.compareAtPrice?.amount !== undefined
-            ? v.compareAtPrice.amount
-            : v.compareAtPrice !== undefined
-            ? v.compareAtPrice
-            : undefined;
-        const vComparePrice = rawVCompare !== undefined && rawVCompare !== null ? Number(rawVCompare) : undefined;
+              ? v.compareAtPrice.amount
+              : v.compareAtPrice !== undefined
+                ? v.compareAtPrice
+                : undefined;
+      const vComparePrice = rawVCompare !== undefined && rawVCompare !== null ? Number(rawVCompare) : undefined;
 
-        const vInv =
-          v.inventory_quantity !== undefined && v.inventory_quantity !== null
-            ? Number(v.inventory_quantity)
-            : v.inventoryQuantity !== undefined && v.inventoryQuantity !== null
+      const vInv =
+        v.inventory_quantity !== undefined && v.inventory_quantity !== null
+          ? Number(v.inventory_quantity)
+          : v.inventoryQuantity !== undefined && v.inventoryQuantity !== null
             ? Number(v.inventoryQuantity)
             : undefined;
 
-        const vAvailable =
-          vInv !== undefined
-            ? vInv > 0
-            : v.availableForSale !== undefined
+      const vAvailable =
+        vInv !== undefined
+          ? vInv > 0
+          : v.availableForSale !== undefined
             ? Boolean(v.availableForSale)
             : v.is_available !== undefined
-            ? Boolean(v.is_available)
-            : isAvailable;
+              ? Boolean(v.is_available)
+              : isAvailable;
 
-        return {
-          id: String(v.id || `var_${id}`),
-          title: v.title || 'Standard Pack',
-          price: vPrice.toFixed(2),
-          compareAtPrice: vComparePrice && vComparePrice > vPrice ? vComparePrice.toFixed(2) : undefined,
-          availableForSale: vAvailable,
-          inventoryQuantity: vInv !== undefined ? vInv : totalInventory,
-          selectedOptions: v.selectedOptions || [],
-        };
-      })
+      return {
+        id: String(v.id || `var_${id}`),
+        title: v.title || 'Standard Pack',
+        price: vPrice.toFixed(2),
+        compareAtPrice: vComparePrice && vComparePrice > vPrice ? vComparePrice.toFixed(2) : undefined,
+        availableForSale: vAvailable,
+        inventoryQuantity: vInv !== undefined ? vInv : totalInventory,
+        selectedOptions: v.selectedOptions || [],
+      };
+    })
     : [
-        {
-          id: backendProduct.default_variant_id || `gid://shopify/ProductVariant/${id}`,
-          title: '250g Pack',
-          price: basePrice.toFixed(2),
-          availableForSale: isAvailable,
-          inventoryQuantity: totalInventory,
-        },
-      ];
+      {
+        id: backendProduct.default_variant_id || `gid://shopify/ProductVariant/${id}`,
+        title: '250g Pack',
+        price: basePrice.toFixed(2),
+        availableForSale: isAvailable,
+        inventoryQuantity: totalInventory,
+      },
+    ];
 
   return {
     id: String(id),
@@ -148,7 +166,7 @@ export function mapProductToUI(backendProduct: any): Product {
     description: backendProduct.description || 'Authentic slow-roasted handcrafted Gujarati khakhra.',
     price: basePrice,
     compareAtPrice: comparePrice > basePrice ? comparePrice : undefined,
-    images: [{ url: normalizedUrl, altText: title }],
+    images: allImages,
     category: backendProduct.productType || backendProduct.category || 'Traditional',
     rating: backendProduct.avg_rating || 4.9,
     reviewsCount: backendProduct.total_reviews || 48,

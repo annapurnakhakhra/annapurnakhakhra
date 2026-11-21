@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { SlidersHorizontal, X, RotateCcw, ChevronDown, ChevronUp, Check, Search } from 'lucide-react';
 
 export interface FilterState {
@@ -78,23 +79,23 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
       {/* Search Input */}
       <div className="space-y-2">
         <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Search Products</label>
-        <div className="relative">
+        <div className="relative w-full">
           <input
             type="text"
             placeholder="Search flavor, ingredient..."
             value={filters.searchQuery}
             onChange={(e) => onFilterChange({ ...filters, searchQuery: e.target.value })}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-3 pr-8 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#7d4b0e] focus:bg-white"
+            className="w-full box-border bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#7d4b0e] focus:bg-white"
           />
           {filters.searchQuery ? (
             <button
               onClick={() => onFilterChange({ ...filters, searchQuery: '' })}
-              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+              className="absolute right-2.5 top-3 text-slate-400 hover:text-slate-600"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           ) : (
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3 pointer-events-none" />
           )}
         </div>
       </div>
@@ -247,6 +248,80 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
     </div>
   );
 
+  // Lock body scroll when mobile drawer is open
+  useEffect(() => {
+    if (isMobileOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileOpen]);
+
+  const mobileDrawer = isMobileOpen && typeof document !== 'undefined' ? (
+    createPortal(
+      <div className="fixed inset-0 z-[9999] lg:hidden flex justify-end">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+          onClick={() => setIsMobileOpen(false)}
+        />
+
+        {/* Drawer Panel */}
+        <div className="relative w-full max-w-xs sm:max-w-sm bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-200">
+          {/* Drawer Header */}
+          <div className="sticky top-0 z-20 bg-white px-5 py-4 border-b border-orange-100 flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-[#7d4b0e]" />
+              <h3 className="font-bold text-base text-[#7d4b0e]">Filter Products</h3>
+              {activeFilterCount > 0 && (
+                <span className="bg-[#7d4b0e] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {activeFilterCount}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsMobileOpen(false)}
+              className="w-8 h-8 rounded-full bg-amber-50 text-slate-700 hover:bg-amber-100 hover:text-slate-900 flex items-center justify-center transition-colors cursor-pointer"
+              aria-label="Close filters"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Drawer Body */}
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-amber-200">
+            {filterContent}
+          </div>
+
+          {/* Drawer Footer */}
+          <div className="sticky bottom-0 z-20 bg-white px-5 py-3.5 border-t border-orange-100 flex items-center gap-2.5 shadow-lg">
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={onReset}
+                className="px-4 py-2.5 rounded-full border border-orange-200 text-[#7d4b0e] text-xs font-bold hover:bg-orange-50 transition-colors cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsMobileOpen(false)}
+              className="flex-1 bg-[#7d4b0e] text-white text-xs font-bold py-2.5 rounded-full shadow-md hover:bg-[#6b400c] transition-colors cursor-pointer text-center"
+            >
+              Apply Filters
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )
+  ) : null;
+
   return (
     <>
       {/* Desktop Sidebar */}
@@ -254,36 +329,8 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
         {filterContent}
       </div>
 
-      {/* Mobile Drawer */}
-      {isMobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs"
-            onClick={() => setIsMobileOpen(false)}
-          />
-          <div className="relative ml-auto w-full max-w-xs bg-white h-full shadow-2xl p-6 overflow-y-auto space-y-6 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
-                <h3 className="font-bold text-base text-[#7d4b0e]">Filter Products</h3>
-                <button
-                  onClick={() => setIsMobileOpen(false)}
-                  className="p-1 rounded-full text-slate-400 hover:text-slate-700"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              {filterContent}
-            </div>
-
-            <button
-              onClick={() => setIsMobileOpen(false)}
-              className="w-full bg-[#7d4b0e] text-white text-xs font-bold py-3 rounded-full shadow-md hover:bg-[#6b400c] transition-colors"
-            >
-              Apply Filters
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Mobile Drawer portaled to document.body */}
+      {mobileDrawer}
     </>
   );
 };

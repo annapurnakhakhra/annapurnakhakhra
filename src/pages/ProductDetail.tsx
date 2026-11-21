@@ -18,6 +18,7 @@ export const ProductDetail: React.FC = () => {
   const { toggleWishlist, isInWishlist } = useWishlist();
 
   const [product, setProduct] = useState<Product | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [selectedVariantId, setSelectedVariantId] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -56,6 +57,8 @@ export const ProductDetail: React.FC = () => {
         setProduct(data);
         if (data) {
           trackProductView(data);
+          const firstImg = data.images?.[0]?.url || (data as any).image_url || '';
+          setSelectedImage(firstImg);
         }
         if (data?.variants?.[0]?.id) {
           setSelectedVariantId(data.variants[0].id);
@@ -238,6 +241,24 @@ export const ProductDetail: React.FC = () => {
 
   const isOutOfStock = isProductOutOfStock || Boolean(isVariantOutOfStock);
 
+  const images: { url: string; altText?: string }[] =
+    Array.isArray(product.images) && product.images.length > 0
+      ? product.images
+      : (product as any).images && Array.isArray((product as any).images)
+        ? (product as any).images.map((img: any) => ({
+          url: typeof img === 'string' ? img : img?.url || img?.src || '',
+          altText: product.title,
+        }))
+        : (product as any).image_url
+          ? [{ url: (product as any).image_url, altText: product.title }]
+          : [];
+
+  const activeImage =
+    selectedImage ||
+    images[0]?.url ||
+    (product as any).image_url ||
+    'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=800&q=80';
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
 
@@ -247,30 +268,59 @@ export const ProductDetail: React.FC = () => {
         <span>Back to Collections</span>
       </Link>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 xl:gap-14 items-start">
 
-        {/* Gallery & Wishlist */}
-        <div className="space-y-4 relative">
-          <button
-            onClick={handleToggleWishlist}
-            disabled={wishlistLoading}
-            className="absolute top-4 right-4 z-10 p-3 bg-white/90 backdrop-blur-md rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all text-rose-500"
-            title="Add to Wishlist"
-          >
-            <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-rose-500' : ''}`} />
-          </button>
+        {/* Gallery & Wishlist (Sticky on Desktop) */}
+        <div className="lg:col-span-7 flex flex-col-reverse lg:flex-row gap-3 sm:gap-4 relative lg:sticky lg:top-24 lg:self-start">
+          {/* 1. Thumbnails Strip (Horizontal on Mobile & Tablet, Vertical on Desktop) */}
+          {images.length > 1 && (
+            <div className="flex lg:flex-col gap-2.5 overflow-x-auto lg:overflow-y-auto max-h-[580px] lg:w-[84px] flex-shrink-0 scrollbar-none py-1">
+              {images.map((img: { url: string; altText?: string }, i: number) => {
+                const isSelected = activeImage === img.url || (!selectedImage && i === 0);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setSelectedImage(img.url)}
+                    className={`relative w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 rounded-xl overflow-hidden border transition-all cursor-pointer bg-white p-1 flex items-center justify-center flex-shrink-0 shadow-2xs ${isSelected
+                      ? "border-2 border-slate-900 ring-1 ring-slate-900"
+                      : "border border-stone-200 hover:border-stone-400 opacity-80 hover:opacity-100"
+                      }`}
+                  >
+                    <img
+                      src={img.url}
+                      alt={img.altText || `thumb-${i}`}
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-          <div className="aspect-square rounded-3xl overflow-hidden bg-orange-50/50 border border-orange-100 shadow-md">
+          {/* 2. Main Large Showcase Image with Wishlist Heart in top-right corner */}
+          <div className="flex-1 relative aspect-square w-full rounded-2xl bg-white overflow-hidden flex items-center justify-center border border-stone-200/80 shadow-xs group">
             <img
-              src={product.images?.[0]?.url || 'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=800&q=80'}
+              src={activeImage}
               alt={product.title}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover transition-transform duration-500 hover:scale-102"
             />
+
+            {/* Circular Wishlist Button in Top-Right Corner */}
+            <button
+              onClick={handleToggleWishlist}
+              disabled={wishlistLoading}
+              className="absolute top-4 right-4 z-10 p-3 bg-white/90 backdrop-blur-md rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all text-rose-500 cursor-pointer"
+              title="Add to Wishlist"
+              aria-label="Add to Wishlist"
+            >
+              <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-rose-500' : ''}`} />
+            </button>
           </div>
         </div>
 
-        {/* Product Details */}
-        <div className="space-y-6">
+        {/* Product Details (Scrolls on the right) */}
+        <div className="lg:col-span-5 space-y-6">
           {/* Header & Title */}
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -282,10 +332,10 @@ export const ProductDetail: React.FC = () => {
                 <span>
                   {reviews.length > 0
                     ? (reviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / reviews.length).toFixed(1)
-                    : (product.rating || 4.9)}
+                    : (product.rating)}
                 </span>
                 <span className="text-slate-400 font-normal">
-                  ({reviews.length > 0 ? `${reviews.length} ${reviews.length === 1 ? 'Review' : 'Reviews'}` : `${product.reviewsCount || 48} Reviews`})
+                  ({reviews.length > 0 ? `${reviews.length} ${reviews.length === 1 ? 'Review' : 'Reviews'}` : `${product.reviewsCount} Reviews`})
                 </span>
               </div>
             </div>
@@ -337,8 +387,8 @@ export const ProductDetail: React.FC = () => {
                       type="button"
                       onClick={() => setSelectedVariantId(v.id)}
                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${isSelected
-                          ? 'bg-[#7d4b0e] text-white shadow-sm ring-2 ring-[#7d4b0e]/30'
-                          : 'bg-white text-slate-700 border border-slate-200 hover:border-amber-400'
+                        ? 'bg-[#7d4b0e] text-white shadow-sm ring-2 ring-[#7d4b0e]/30'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:border-amber-400'
                         } ${isVOutOfStock ? 'opacity-65' : ''}`}
                     >
                       {v.title || '100gm'}

@@ -386,7 +386,7 @@ export const Shop: React.FC = () => {
         {/* Main Content Layout: Sidebar + Product Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
           {/* Desktop & Mobile Product Filters */}
-          <div className="lg:col-span-1 lg:sticky lg:top-32 self-start z-20">
+          <div className="lg:col-span-1 lg:sticky lg:top-32 self-start">
             <ProductFilters
               categories={categoriesList}
               madeWithOptions={madeWithOptions}
@@ -404,13 +404,13 @@ export const Shop: React.FC = () => {
           <div className="lg:col-span-3 space-y-6">
             {loading ? (
               <div
-                className={`grid gap-4 sm:gap-6 ${gridCols === 3
-                    ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-                    : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4'
+                className={`grid gap-3 sm:gap-6 ${gridCols === 3
+                    ? 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-3'
+                    : 'grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4'
                   }`}
               >
                 {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <div key={n} className="h-80 bg-amber-50/50 rounded-3xl animate-pulse" />
+                  <div key={n} className="h-64 sm:h-80 bg-amber-50/50 rounded-2xl sm:rounded-3xl animate-pulse" />
                 ))}
               </div>
             ) : filteredProducts.length === 0 ? (
@@ -432,9 +432,9 @@ export const Shop: React.FC = () => {
             ) : (
               <>
                 <div
-                  className={`grid gap-4 sm:gap-6 ${gridCols === 3
-                      ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-                      : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4'
+                  className={`grid gap-3 sm:gap-6 ${gridCols === 3
+                      ? 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-3'
+                      : 'grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4'
                     }`}
                 >
                   {paginatedProducts.map((product) => (

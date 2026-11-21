@@ -36,16 +36,16 @@ export const ProductModal: React.FC<ProductQuickViewModalProps> = ({ isOpen, onC
   const priceNum = selectedVariant?.price
     ? parseFloat(String(selectedVariant.price))
     : typeof product.price === 'number'
-    ? product.price
-    : parseFloat(String(product.price)) || 0;
+      ? product.price
+      : parseFloat(String(product.price)) || 0;
 
   const compareAtNum = selectedVariant?.compareAtPrice
     ? parseFloat(String(selectedVariant.compareAtPrice))
     : product.compareAtPrice
-    ? typeof product.compareAtPrice === 'number'
-      ? product.compareAtPrice
-      : parseFloat(String(product.compareAtPrice))
-    : null;
+      ? typeof product.compareAtPrice === 'number'
+        ? product.compareAtPrice
+        : parseFloat(String(product.compareAtPrice))
+      : null;
 
   const isVariantOutOfStock =
     selectedVariant &&
@@ -135,11 +135,10 @@ export const ProductModal: React.FC<ProductQuickViewModalProps> = ({ isOpen, onC
                           key={v.id}
                           type="button"
                           onClick={() => setSelectedVariantId(v.id)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                            isSelected
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${isSelected
                               ? 'bg-[#7d4b0e] text-white shadow-xs'
                               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          } ${isVOutOfStock ? 'opacity-60' : ''}`}
+                            } ${isVOutOfStock ? 'opacity-60' : ''}`}
                         >
                           {v.title}
                           {isVOutOfStock && <span className="ml-1 text-[10px] text-rose-500 font-normal">(Sold out)</span>}

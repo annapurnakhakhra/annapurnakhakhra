@@ -77,21 +77,21 @@ export const Wishlist: React.FC = () => {
         typeof raw.price === 'number'
           ? raw.price
           : raw.price?.amount
-          ? Number(raw.price.amount)
-          : raw.priceRange?.minVariantPrice?.amount
-          ? Number(raw.priceRange.minVariantPrice.amount)
-          : raw.variants?.[0]?.price?.amount
-          ? Number(raw.variants[0].price.amount)
-          : raw.selling_price || raw.unit_price || 85;
+            ? Number(raw.price.amount)
+            : raw.priceRange?.minVariantPrice?.amount
+              ? Number(raw.priceRange.minVariantPrice.amount)
+              : raw.variants?.[0]?.price?.amount
+                ? Number(raw.variants[0].price.amount)
+                : raw.selling_price || raw.unit_price || 85;
 
       const compareAtNum =
         typeof raw.compareAtPrice === 'number'
           ? raw.compareAtPrice
           : raw.compareAtPrice?.amount
-          ? Number(raw.compareAtPrice.amount)
-          : raw.compare_at_price
-          ? Number(raw.compare_at_price)
-          : undefined;
+            ? Number(raw.compareAtPrice.amount)
+            : raw.compare_at_price
+              ? Number(raw.compare_at_price)
+              : undefined;
 
       const rawImg =
         raw.image_url ||
@@ -280,11 +280,10 @@ export const Wishlist: React.FC = () => {
                 {/* Add to Cart button */}
                 <button
                   onClick={() => handleAddToCart(product)}
-                  className={`w-full text-xs font-bold py-2.5 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-sm ${
-                    isAdded
+                  className={`w-full text-xs font-bold py-2.5 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-sm ${isAdded
                       ? 'bg-emerald-600 text-white'
                       : 'bg-[#7d4b0e] hover:bg-[#6b400c] text-white active:scale-95'
-                  }`}
+                    }`}
                 >
                   {isAdded ? (
                     <>
