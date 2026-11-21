@@ -94,7 +94,7 @@ export const Header: React.FC = () => {
                           placeholder="Search..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-48 xl:w-60 bg-white border border-amber-300 rounded-full py-2 pl-4 pr-8 text-xs text-[#7d4b0e] focus:outline-none focus:ring-2 focus:ring-[#7d4b0e]"
+                          className="w-48 xl:w-60 bg-white border border-amber-300 rounded-full py-2 pl-4 pr-8 text-base md:text-xs text-[#7d4b0e] focus:outline-none focus:ring-2 focus:ring-[#7d4b0e]"
                           autoFocus
                         />
                         <button

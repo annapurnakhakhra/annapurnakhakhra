@@ -85,17 +85,17 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
             placeholder="Search flavor, ingredient..."
             value={filters.searchQuery}
             onChange={(e) => onFilterChange({ ...filters, searchQuery: e.target.value })}
-            className="w-full box-border bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#7d4b0e] focus:bg-white"
+            className="w-full box-border bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-3.5 pr-8 text-base md:text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#7d4b0e] focus:bg-white"
           />
           {filters.searchQuery ? (
             <button
               onClick={() => onFilterChange({ ...filters, searchQuery: '' })}
-              className="absolute right-2.5 top-3 text-slate-400 hover:text-slate-600"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           ) : (
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           )}
         </div>
       </div>

@@ -68,7 +68,7 @@ export const MobileBottomNav: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search Khakhra, sweets, snacks..."
-                className="w-full bg-amber-50/60 border border-amber-300 rounded-2xl py-3 pl-4 pr-12 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7d4b0e] focus:bg-white transition-all"
+                className="w-full bg-amber-50/60 border border-amber-300 rounded-2xl py-3 pl-4 pr-12 text-base md:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7d4b0e] focus:bg-white transition-all"
               />
               <button
                 type="submit"
