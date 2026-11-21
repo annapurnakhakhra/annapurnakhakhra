@@ -23,6 +23,8 @@ export interface Product {
   reviewsCount?: number;
   total_inventory?: number;
   availableForSale?: boolean;
+  wishlist_item_id?: string | number;
+  wishlistId?: string | number;
 }
 
 export interface CartItem {

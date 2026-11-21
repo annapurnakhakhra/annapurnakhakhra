@@ -50,12 +50,14 @@ export const Wishlist: React.FC = () => {
   const resolvedWishlist = useMemo(() => {
     return wishlist.map((item: any) => {
       const itemId = String(item.product_id || item.productId || item.id || '');
+      const wishlistItemId = item.wishlist_item_id || item.wishlistId || item.id;
       const matched = catalogMap.get(itemId);
 
       if (matched) {
         return {
           ...matched,
-          wishlistKey: item.id || matched.id,
+          wishlist_item_id: wishlistItemId,
+          wishlistKey: wishlistItemId || matched.id,
         };
       }
 
@@ -126,7 +128,8 @@ export const Wishlist: React.FC = () => {
 
       return {
         ...resolved,
-        wishlistKey: item.id || resolved.id,
+        wishlist_item_id: wishlistItemId,
+        wishlistKey: wishlistItemId || resolved.id,
       };
     });
   }, [wishlist, catalogMap]);
@@ -139,8 +142,8 @@ export const Wishlist: React.FC = () => {
     }, 2000);
   };
 
-  const handleRemove = async (productId: string | number) => {
-    await removeFromWishlist(productId);
+  const handleRemove = async (productIdOrWishlistId: string | number) => {
+    await removeFromWishlist(productIdOrWishlistId);
   };
 
   const isLoading = contextLoading && catalogLoading && wishlist.length === 0;
@@ -220,8 +223,8 @@ export const Wishlist: React.FC = () => {
               >
                 {/* Remove button */}
                 <button
-                  onClick={() => handleRemove(product.wishlistKey || product.id)}
-                  className="absolute top-6 right-6 z-20 p-2 bg-white/95 backdrop-blur-xs rounded-full shadow-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all"
+                  onClick={() => handleRemove(product.wishlist_item_id || product.wishlistKey || product.id)}
+                  className="absolute top-6 right-6 z-20 p-2 bg-white/95 backdrop-blur-xs rounded-full shadow-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
                   title="Remove from Wishlist"
                   aria-label="Remove from Wishlist"
                 >

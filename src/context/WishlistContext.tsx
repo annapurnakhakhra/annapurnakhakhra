@@ -73,13 +73,16 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         const enrichedList: Product[] = backendItems.map((item: any) => {
           const prodId = String(item.product_id || item.productId || item.id || '');
+          const wishlistItemId = String(item.wishlist_item_id || item.wishlistItemId || item.id || '');
+
           // Check if item has a match in product catalog
           const catalogMatch = productMap.get(prodId);
           if (catalogMatch) {
             return {
               ...catalogMatch,
-              // Keep backend wishlist record ID for deletion
-              ...(item.id ? { wishlistId: item.id } : {}),
+              // Keep backend wishlist record ID (wishlist_item_id) for deletion
+              wishlist_item_id: wishlistItemId,
+              wishlistId: wishlistItemId,
             };
           }
 
@@ -114,20 +117,14 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             id: String(prodId || mapped.id),
             title,
             price: Number(price) || 85,
-            ...(item.id ? { wishlistId: item.id } : {}),
+            wishlist_item_id: wishlistItemId,
+            wishlistId: wishlistItemId,
           };
         });
 
-        // Merge with existing local products (avoid losing local offline items)
-        setWishlist((currentLocal) => {
-          const merged = [...enrichedList];
-          currentLocal.forEach((localProd) => {
-            if (!merged.some((p) => String(p.id) === String(localProd.id))) {
-              merged.push(localProd);
-            }
-          });
-          return merged;
-        });
+        setWishlist(enrichedList);
+      } else if (Array.isArray(backendItems) && backendItems.length === 0) {
+        setWishlist([]);
       }
     } catch (err) {
       console.error('Failed to sync backend wishlist:', err);
@@ -142,19 +139,43 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [syncWithBackend]);
 
   const toggleWishlist = async (product: Product) => {
-    const exists = wishlist.some((p) => String(p.id) === String(product.id));
+    const existingIndex = wishlist.findIndex((p: any) =>
+      String(p.id) === String(product.id) ||
+      (p.wishlist_item_id && (product as any).wishlist_item_id && String(p.wishlist_item_id) === String((product as any).wishlist_item_id))
+    );
+    const exists = existingIndex > -1;
 
     if (exists) {
       // Remove
-      setWishlist((prev) => prev.filter((p) => String(p.id) !== String(product.id)));
+      const existingItem = wishlist[existingIndex];
+      const wishlistItemId =
+        (existingItem as any)?.wishlist_item_id ||
+        (existingItem as any)?.wishlistId ||
+        (product as any)?.wishlist_item_id ||
+        (product as any)?.wishlistId;
+
+      setWishlist((prev: any[]) =>
+        prev.filter((p) =>
+          String(p.id) !== String(product.id) &&
+          (!wishlistItemId || (String(p.wishlist_item_id) !== String(wishlistItemId) && String(p.wishlistId) !== String(wishlistItemId)))
+        )
+      );
+
       const token = localStorage.getItem('userToken') || localStorage.getItem('annapurna_token');
       if (token) {
         try {
-          const existingItem = wishlist.find((p) => String(p.id) === String(product.id));
-          const deleteId = (existingItem as any)?.wishlistId || product.id;
-          await wishlistService.deleteWishlistItem(deleteId);
+          if (wishlistItemId) {
+            await wishlistService.deleteWishlistItem(wishlistItemId);
+          } else {
+            await wishlistService.toggleWishlist(product.id, product.variants?.[0]?.id || null);
+          }
         } catch (err) {
-          console.warn('Backend wishlist remove failed, local updated:', err);
+          console.warn('Backend deleteWishlistItem failed, attempting toggle fallback:', err);
+          try {
+            await wishlistService.toggleWishlist(product.id, product.variants?.[0]?.id || null);
+          } catch (toggleErr) {
+            console.error('Wishlist toggle fallback error:', toggleErr);
+          }
         }
       }
     } else {
@@ -163,7 +184,21 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const token = localStorage.getItem('userToken') || localStorage.getItem('annapurna_token');
       if (token) {
         try {
-          await wishlistService.toggleWishlist(product.id, product.variants?.[0]?.id || null);
+          const res = await wishlistService.toggleWishlist(product.id, product.variants?.[0]?.id || null);
+          const newItemId =
+            res?.data?.wishlist_item_id ||
+            res?.data?.id ||
+            res?.wishlist_item_id ||
+            res?.id;
+          if (newItemId) {
+            setWishlist((prev: any[]) =>
+              prev.map((p) =>
+                String(p.id) === String(product.id)
+                  ? { ...p, wishlist_item_id: String(newItemId), wishlistId: String(newItemId) }
+                  : p
+              )
+            );
+          }
         } catch (err) {
           console.warn('Backend wishlist toggle failed, local updated:', err);
         }
@@ -171,23 +206,58 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const removeFromWishlist = async (productId: string | number) => {
-    const existingItem = wishlist.find((p) => String(p.id) === String(productId) || (p as any)?.wishlistId === productId);
-    setWishlist((prev) => prev.filter((p) => String(p.id) !== String(productId) && (p as any)?.wishlistId !== productId));
+  const removeFromWishlist = async (productIdOrWishlistId: string | number) => {
+    const targetId = String(productIdOrWishlistId);
+
+    // Find existing item by wishlist_item_id or product id
+    const existingItem = wishlist.find((p: any) =>
+      String(p.wishlist_item_id) === targetId ||
+      String(p.wishlistId) === targetId ||
+      String(p.id) === targetId ||
+      String(p.product_id) === targetId
+    );
+
+    const prodId = existingItem ? String(existingItem.id) : targetId;
+    const wishlistItemId =
+      (existingItem as any)?.wishlist_item_id ||
+      (existingItem as any)?.wishlistId ||
+      (existingItem ? null : targetId);
+
+    // Optimistically remove from state
+    setWishlist((prev: any[]) =>
+      prev.filter((p) =>
+        String(p.id) !== prodId &&
+        String(p.wishlist_item_id) !== targetId &&
+        String(p.wishlistId) !== targetId
+      )
+    );
 
     const token = localStorage.getItem('userToken') || localStorage.getItem('annapurna_token');
     if (token) {
       try {
-        const deleteId = (existingItem as any)?.wishlistId || productId;
-        await wishlistService.deleteWishlistItem(deleteId);
-      } catch (err) {
-        console.warn('Backend wishlist item deletion failed:', err);
+        if (wishlistItemId) {
+          // Send wishlist_item_id to DELETE /api/shop/wishlist/:id
+          await wishlistService.deleteWishlistItem(wishlistItemId);
+        } else {
+          // Fallback to toggle by product id if wishlist_item_id wasn't found
+          await wishlistService.toggleWishlist(prodId, null);
+        }
+      } catch (err: any) {
+        console.warn('Backend deleteWishlistItem failed, attempting toggle fallback:', err);
+        try {
+          await wishlistService.toggleWishlist(prodId, null);
+        } catch (toggleErr) {
+          console.error('Wishlist deletion failed on backend:', toggleErr);
+        }
       }
     }
   };
 
   const isInWishlist = (productId: string | number) => {
-    return wishlist.some((p) => String(p.id) === String(productId));
+    return wishlist.some((p: any) =>
+      String(p.id) === String(productId) ||
+      String(p.product_id) === String(productId)
+    );
   };
 
   const openWishlist = () => setIsWishlistOpen(true);
