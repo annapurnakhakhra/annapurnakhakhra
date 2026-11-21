@@ -74,9 +74,10 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const enrichedList: Product[] = backendItems.map((item: any) => {
           const prodId = String(item.product_id || item.productId || item.id || '');
           const wishlistItemId = String(item.wishlist_item_id || item.wishlistItemId || item.id || '');
+          const prodHandle = item.product_handle || item.handle || '';
 
-          // Check if item has a match in product catalog
-          const catalogMatch = productMap.get(prodId);
+          // Check if item has a match in product catalog by id or handle
+          const catalogMatch = productMap.get(prodId) || (prodHandle ? productMap.get(prodHandle) : undefined);
           if (catalogMatch) {
             return {
               ...catalogMatch,

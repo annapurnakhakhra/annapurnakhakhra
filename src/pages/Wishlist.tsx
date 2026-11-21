@@ -50,8 +50,9 @@ export const Wishlist: React.FC = () => {
   const resolvedWishlist = useMemo(() => {
     return wishlist.map((item: any) => {
       const itemId = String(item.product_id || item.productId || item.id || '');
+      const itemHandle = item.product_handle || item.handle || '';
       const wishlistItemId = item.wishlist_item_id || item.wishlistId || item.id;
-      const matched = catalogMap.get(itemId);
+      const matched = catalogMap.get(itemId) || (itemHandle ? catalogMap.get(itemHandle) : undefined);
 
       if (matched) {
         return {
@@ -103,25 +104,43 @@ export const Wishlist: React.FC = () => {
 
       const imgUrl = rawImg ? normalizeImageUrl(rawImg) : 'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=600&q=80';
 
-      const handle = raw.handle || raw.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const handle = raw.handle || raw.slug || itemHandle || title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+      const totalInventory =
+        raw.total_inventory !== undefined
+          ? Number(raw.total_inventory)
+          : item.total_inventory !== undefined
+            ? Number(item.total_inventory)
+            : undefined;
+
+      const availableForSale =
+        raw.availableForSale !== undefined
+          ? Boolean(raw.availableForSale)
+          : item.availableForSale !== undefined
+            ? Boolean(item.availableForSale)
+            : totalInventory !== undefined
+              ? totalInventory > 0
+              : true;
 
       const resolved: Product = {
         id: itemId,
         title,
         handle,
-        description: raw.description || 'Authentic slow-roasted handcrafted Gujarati khakhra.',
+        description: raw.description || item.description || 'Authentic slow-roasted handcrafted Gujarati khakhra.',
         price: Number(priceNum) || 85,
         compareAtPrice: compareAtNum && compareAtNum > priceNum ? compareAtNum : undefined,
         images: [{ url: imgUrl, altText: title }],
-        category: raw.category || 'Traditional Khakhra',
-        rating: raw.rating || 4.9,
-        reviewsCount: raw.reviewsCount || 36,
-        variants: [
+        category: raw.category || item.category || 'Traditional Khakhra',
+        rating: raw.rating || item.rating || 4.9,
+        reviewsCount: raw.reviewsCount || item.reviewsCount || 36,
+        total_inventory: totalInventory,
+        availableForSale,
+        variants: raw.variants || item.variants || [
           {
-            id: raw.variant_id || `var_${itemId}`,
-            title: '200g Pack',
+            id: raw.variant_id || item.variant_id || `var_${itemId}`,
+            title: raw.variant_title || item.variant_title || '200g Pack',
             price: String(priceNum),
-            availableForSale: true,
+            availableForSale,
           },
         ],
       };
@@ -216,6 +235,18 @@ export const Wishlist: React.FC = () => {
               product.image ||
               'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=600&q=80';
 
+            const isOutOfStock =
+              Number(product.total_inventory) === 0 ||
+              product.availableForSale === false ||
+              (product.variants &&
+                product.variants.length > 0 &&
+                product.variants.every(
+                  (v: any) =>
+                    v.availableForSale === false ||
+                    Number(v.inventoryQuantity) === 0 ||
+                    Number(v.inventory_quantity) === 0
+                ));
+
             return (
               <div
                 key={product.wishlistKey || product.id}
@@ -231,12 +262,16 @@ export const Wishlist: React.FC = () => {
                   <Trash2 className="w-4 h-4" />
                 </button>
 
-                {/* Discount Badge */}
-                {hasDiscount && (
+                {/* Out of Stock or Discount Badge */}
+                {isOutOfStock ? (
+                  <span className="absolute top-6 left-6 z-20 bg-rose-700/90 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-md uppercase tracking-wider backdrop-blur-xs">
+                    Out of Stock
+                  </span>
+                ) : hasDiscount ? (
                   <span className="absolute top-6 left-6 z-20 bg-red-600 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-sm">
                     {discountPercent}% OFF
                   </span>
-                )}
+                ) : null}
 
                 {/* Product Image */}
                 <Link to={`/product/${product.handle}`} className="block">
@@ -244,7 +279,7 @@ export const Wishlist: React.FC = () => {
                     <img
                       src={imageUrl}
                       alt={product.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${isOutOfStock ? 'opacity-70 grayscale-[25%]' : ''}`}
                     />
                   </div>
                 </Link>
@@ -277,26 +312,35 @@ export const Wishlist: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Add to Cart button */}
-                <button
-                  onClick={() => handleAddToCart(product)}
-                  className={`w-full text-xs font-bold py-2.5 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-sm ${isAdded
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-[#7d4b0e] hover:bg-[#6b400c] text-white active:scale-95'
-                    }`}
-                >
-                  {isAdded ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Added to Bag!</span>
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingBag className="w-4 h-4" />
-                      <span>Add to Cart</span>
-                    </>
-                  )}
-                </button>
+                {/* Add to Cart / Out of Stock button */}
+                {isOutOfStock ? (
+                  <button
+                    disabled
+                    className="w-full text-xs font-bold py-2.5 rounded-2xl bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 select-none flex items-center justify-center gap-2"
+                  >
+                    <span>Out of Stock</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleAddToCart(product)}
+                    className={`w-full text-xs font-bold py-2.5 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer ${isAdded
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-[#7d4b0e] hover:bg-[#6b400c] text-white active:scale-95'
+                      }`}
+                  >
+                    {isAdded ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Added to Bag!</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingBag className="w-4 h-4" />
+                        <span>Add to Cart</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             );
           })}
